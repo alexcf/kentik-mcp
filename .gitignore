@@ -12,3 +12,6 @@ kentik-mcp
 .DS_Store
 Thumbs.db
 .gh/
+
+# Generated docs (run scripts/crawl_docs.py + ingest_docs.py to rebuild)
+docs/
