@@ -48,12 +48,12 @@ func makeGetAuditLogHandler(client *kentik.Client) server.ToolHandlerFunc {
 			params.Set("user_id", v)
 		}
 
-		path := "/audit-log"
+		path := "/audit/v202601/events"
 		if len(params) > 0 {
 			path = path + "?" + params.Encode()
 		}
 
-		data, err := client.V5("GET", path, nil)
+		data, err := client.V6("GET", path, nil)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Get audit log failed: %v", err)), nil
 		}
