@@ -29,4 +29,11 @@ func RegisterAll(s *server.MCPServer, client *kentik.Client) {
 	registerWriteLabelTools(s, client)
 	registerWriteSiteTools(s, client)
 	registerWriteSyntheticsTools(s, client)
+	RegisterBatch1(s, client)
+	RegisterBatch2(s, client)
+	RegisterBatch3(s, client)
+	RegisterBatch4(s, client)
+	RegisterBatch5(s, client)
+	RegisterBatch6(s, client)
+	RegisterBatch79(s, client)
 }
