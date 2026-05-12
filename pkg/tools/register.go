@@ -25,4 +25,8 @@ func RegisterAll(s *server.MCPServer, client *kentik.Client) {
 	registerContextTools(s)
 	registerAccountTools(s, client)
 	registerDocsTools(s)
+	registerWriteDeviceTools(s, client)
+	registerWriteLabelTools(s, client)
+	registerWriteSiteTools(s, client)
+	registerWriteSyntheticsTools(s, client)
 }

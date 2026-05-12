@@ -81,6 +81,17 @@ func formatJSON(data json.RawMessage) string {
 	return pretty.String()
 }
 
+func splitAndTrim(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
 func makeSearchDevicesHandler(client *kentik.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		data, err := client.V5("GET", "/devices", nil)
