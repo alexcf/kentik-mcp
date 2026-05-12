@@ -24,4 +24,5 @@ func RegisterAll(s *server.MCPServer, client *kentik.Client) {
 	registerDimensionTools(s)
 	registerContextTools(s)
 	registerAccountTools(s, client)
+	registerDocsTools(s)
 }
