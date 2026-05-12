@@ -100,23 +100,19 @@ func makeCreateCustomDimensionHandler(client *kentik.Client) server.ToolHandlerF
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		displayName, err := request.RequireString("display_name")
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
 		dimType, err := request.RequireString("type")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-
+		// V6 /v1/customdimension with body: "dimension" — send dimension fields directly
 		body := map[string]interface{}{
-			"customDimension": map[string]interface{}{
-				"name":         name,
-				"display_name": displayName,
-				"type":         dimType,
-			},
+			"name": name,
+			"type": dimType,
 		}
-		data, err := client.V5("POST", "/customdimension", body)
+		if displayName, err := request.RequireString("display_name"); err == nil && displayName != "" {
+			body["description"] = displayName
+		}
+		data, err := client.V6("POST", "/v1/customdimension", body)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Create custom dimension failed: %v", err)), nil
 		}
@@ -142,7 +138,7 @@ func makeUpdateCustomDimensionHandler(client *kentik.Client) server.ToolHandlerF
 			return mcp.NewToolResultError("No fields to update provided."), nil
 		}
 
-		data, err := client.V5("PUT", fmt.Sprintf("/customdimension/%s", id), map[string]interface{}{"customDimension": dim})
+		data, err := client.V5("PUT", fmt.Sprintf("/customdimension/%s", id), map[string]interface{}{"dimension": dim})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Update custom dimension failed: %v", err)), nil
 		}

@@ -46,9 +46,11 @@ func registerBGPTools(s *server.MCPServer, client *kentik.Client) {
 			targets = append(targets, map[string]interface{}{"prefix": p})
 		}
 		monitor := map[string]interface{}{
-			"name":    name,
-			"status":  "BGP_MONITOR_STATUS_ACTIVE",
-			"targets": targets,
+			"name":   name,
+			"status": "BGP_MONITOR_STATUS_ACTIVE",
+			"settings": map[string]interface{}{
+				"targets": targets,
+			},
 		}
 		if v, err := req.RequireString("description"); err == nil && v != "" { monitor["description"] = v }
 		if v, err := req.RequireString("notify_channel_ids"); err == nil && v != "" {

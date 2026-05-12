@@ -44,7 +44,7 @@ func makeCreateLabelHandler(client *kentik.Client) server.ToolHandlerFunc {
 		if v, err := request.RequireString("description"); err == nil && v != "" {
 			label["description"] = v
 		}
-		data, err := client.V5("POST", "/deviceLabels", map[string]interface{}{"label": label})
+		data, err := client.V6("POST", "/label/v202210/labels", map[string]interface{}{"label": label})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Create label failed: %v", err)), nil
 		}
@@ -71,7 +71,7 @@ func makeUpdateLabelHandler(client *kentik.Client) server.ToolHandlerFunc {
 		if len(label) == 0 {
 			return mcp.NewToolResultError("No fields to update provided."), nil
 		}
-		data, err := client.V5("PUT", fmt.Sprintf("/deviceLabels/%s", id), map[string]interface{}{"label": label})
+		data, err := client.V6("PUT", fmt.Sprintf("/label/v202210/labels/%s", id), map[string]interface{}{"label": label})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Update label failed: %v", err)), nil
 		}
@@ -85,7 +85,7 @@ func makeDeleteLabelHandler(client *kentik.Client) server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		data, err := client.V5("DELETE", fmt.Sprintf("/deviceLabels/%s", id), nil)
+		data, err := client.V6("DELETE", fmt.Sprintf("/label/v202210/labels/%s", id), nil)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Delete label failed: %v", err)), nil
 		}
