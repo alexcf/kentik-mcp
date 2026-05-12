@@ -106,7 +106,7 @@ func makeCompareSitesHandler(client *kentik.Client) server.ToolHandlerFunc {
 			}
 
 			// Apply filters
-			filtersObj := buildFilters(request)
+			filtersObj := buildFilters(request, nil)
 			if filtersObj != nil {
 				query["filters_obj"] = filtersObj
 			}

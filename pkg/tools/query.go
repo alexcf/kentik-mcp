@@ -91,6 +91,9 @@ func registerQueryTools(s *server.MCPServer, client *kentik.Client) {
 		mcp.WithString("fast_data",
 			mcp.Description("Dataset selection: Auto, Fast, or Full. Default: Auto"),
 		),
+		mcp.WithString("context_name",
+			mcp.Description("Name of a saved query context to use as defaults (see kentik_list_contexts). Explicit parameters override context values."),
+		),
 	)
 	s.AddTool(queryData, makeQueryDataHandler(client))
 
@@ -140,6 +143,9 @@ func registerQueryTools(s *server.MCPServer, client *kentik.Client) {
 		mcp.WithBoolean("all_selected",
 			mcp.Description("Query all devices. Default: true"),
 		),
+		mcp.WithString("context_name",
+			mcp.Description("Name of a saved query context to use as defaults (see kentik_list_contexts). Explicit parameters override context values."),
+		),
 	)
 	s.AddTool(queryCompare, makeQueryCompareHandler(client))
 
@@ -166,7 +172,7 @@ func registerQueryTools(s *server.MCPServer, client *kentik.Client) {
 	s.AddTool(queryURL, makeQueryURLHandler(client))
 }
 
-func buildQueryObject(request mcp.CallToolRequest) (map[string]interface{}, error) {
+func buildQueryObject(request mcp.CallToolRequest, ctx *QueryContext) (map[string]interface{}, error) {
 	metric, err := request.RequireString("metric")
 	if err != nil {
 		return nil, err
@@ -197,8 +203,8 @@ func buildQueryObject(request mcp.CallToolRequest) (map[string]interface{}, erro
 		depth = dp
 	}
 	allSelected := true
-	if val, err := request.RequireString("all_selected"); err == nil && val == "false" {
-		allSelected = false
+	if val, err := request.RequireBool("all_selected"); err == nil {
+		allSelected = val
 	}
 	fastData := "Auto"
 	if fd, err := request.RequireString("fast_data"); err == nil && fd != "" {
@@ -251,7 +257,7 @@ func buildQueryObject(request mcp.CallToolRequest) (map[string]interface{}, erro
 	}
 
 	// Build filters from both raw JSON and convenience params
-	filtersObj := buildFilters(request)
+	filtersObj := buildFilters(request, ctx)
 	if filtersObj != nil {
 		query["filters_obj"] = filtersObj
 	}
@@ -260,11 +266,16 @@ func buildQueryObject(request mcp.CallToolRequest) (map[string]interface{}, erro
 }
 
 // buildFilters merges raw filters_json with convenience filter parameters.
-func buildFilters(request mcp.CallToolRequest) map[string]interface{} {
+// ctx is optional — if non-nil, its fields are used as fallback when the request param is empty.
+func buildFilters(request mcp.CallToolRequest, ctx *QueryContext) map[string]interface{} {
 	var filterGroups []map[string]interface{}
 
-	// Parse raw filters_json first
-	if filtersJSON, err := request.RequireString("filters_json"); err == nil && filtersJSON != "" {
+	// Parse raw filters_json first (explicit param wins over context)
+	filtersJSON, _ := request.RequireString("filters_json")
+	if filtersJSON == "" && ctx != nil {
+		filtersJSON = ctx.FiltersJSON
+	}
+	if filtersJSON != "" {
 		var raw map[string]interface{}
 		if err := json.Unmarshal([]byte(filtersJSON), &raw); err == nil {
 			if groups, ok := raw["filterGroups"].([]interface{}); ok {
@@ -277,24 +288,39 @@ func buildFilters(request mcp.CallToolRequest) map[string]interface{} {
 		}
 	}
 
-	// Convenience filters: each becomes a filter group
+	// Convenience filters: each becomes a filter group.
+	// Explicit request params win; context fields are used as fallback.
 	convenienceFilters := []struct {
-		param string
-		field string
+		param      string
+		field      string
+		ctxFallback func() string
 	}{
-		{"src_connect_type", "i_src_connect_type_name"},
-		{"dst_connect_type", "i_dst_connect_type_name"},
-		{"src_ip", "inet_src_addr"},
-		{"dst_ip", "inet_dst_addr"},
-		{"port", "l4_dst_port"},
-		{"protocol", "protocol"},
-		{"src_as", "src_as"},
-		{"dst_as", "dst_as"},
+		{"src_connect_type", "i_src_connect_type_name", func() string {
+			if ctx != nil { return ctx.SrcConnectType }; return ""
+		}},
+		{"dst_connect_type", "i_dst_connect_type_name", func() string {
+			if ctx != nil { return ctx.DstConnectType }; return ""
+		}},
+		{"src_ip", "inet_src_addr", func() string { return "" }},
+		{"dst_ip", "inet_dst_addr", func() string { return "" }},
+		{"port", "l4_dst_port", func() string {
+			if ctx != nil { return ctx.Port }; return ""
+		}},
+		{"protocol", "protocol", func() string { return "" }},
+		{"src_as", "src_as", func() string {
+			if ctx != nil { return ctx.SrcAS }; return ""
+		}},
+		{"dst_as", "dst_as", func() string {
+			if ctx != nil { return ctx.DstAS }; return ""
+		}},
 	}
 
 	for _, cf := range convenienceFilters {
 		val, err := request.RequireString(cf.param)
 		if err != nil || val == "" {
+			val = cf.ctxFallback()
+		}
+		if val == "" {
 			continue
 		}
 
@@ -343,9 +369,14 @@ func buildFilters(request mcp.CallToolRequest) map[string]interface{} {
 
 func makeQueryDataHandler(client *kentik.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		resolvedDevices := resolveDeviceShortcuts(client, request)
+		var qctx *QueryContext
+		if ctxName, err := request.RequireString("context_name"); err == nil && ctxName != "" {
+			qctx = GetContext(ctxName)
+		}
 
-		query, err := buildQueryObject(request)
+		resolvedDevices := resolveDeviceShortcuts(client, request, qctx)
+
+		query, err := buildQueryObject(request, qctx)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -377,18 +408,32 @@ func makeQueryDataHandler(client *kentik.Client) server.ToolHandlerFunc {
 }
 
 // resolveDeviceShortcuts resolves site_name or device_label to device names.
-func resolveDeviceShortcuts(client *kentik.Client, request mcp.CallToolRequest) string {
-	if siteName, err := request.RequireString("site_name"); err == nil && siteName != "" {
+// ctx is optional — if non-nil, its fields are used as fallback when the request param is empty.
+func resolveDeviceShortcuts(client *kentik.Client, request mcp.CallToolRequest, ctx *QueryContext) string {
+	siteName, _ := request.RequireString("site_name")
+	if siteName == "" && ctx != nil {
+		siteName = ctx.SiteName
+	}
+	if siteName != "" {
 		names, _ := resolveDevicesBySite(client, siteName)
 		if len(names) > 0 {
 			return strings.Join(names, ",")
 		}
 	}
-	if label, err := request.RequireString("device_label"); err == nil && label != "" {
+
+	label, _ := request.RequireString("device_label")
+	if label == "" && ctx != nil {
+		label = ctx.DeviceLabel
+	}
+	if label != "" {
 		names, _ := resolveDevicesByLabel(client, label)
 		if len(names) > 0 {
 			return strings.Join(names, ",")
 		}
+	}
+
+	if ctx != nil && ctx.DeviceNames != "" {
+		return ctx.DeviceNames
 	}
 	return ""
 }
@@ -458,14 +503,19 @@ func resolveDevicesByLabel(client *kentik.Client, label string) ([]string, error
 // makeQueryCompareHandler runs bytes + fps queries and produces a skew table.
 func makeQueryCompareHandler(client *kentik.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		resolvedDevices := resolveDeviceShortcuts(client, request)
+		var qctx *QueryContext
+		if ctxName, err := request.RequireString("context_name"); err == nil && ctxName != "" {
+			qctx = GetContext(ctxName)
+		}
+
+		resolvedDevices := resolveDeviceShortcuts(client, request, qctx)
 
 		// Build base query for bytes
-		bytesQuery, err := buildCompareQuery(request, "bytes")
+		bytesQuery, err := buildCompareQuery(request, "bytes", qctx)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		fpsQuery, err := buildCompareQuery(request, "fps")
+		fpsQuery, err := buildCompareQuery(request, "fps", qctx)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -609,7 +659,7 @@ func makeQueryCompareHandler(client *kentik.Client) server.ToolHandlerFunc {
 	}
 }
 
-func buildCompareQuery(request mcp.CallToolRequest, metric string) (map[string]interface{}, error) {
+func buildCompareQuery(request mcp.CallToolRequest, metric string, ctx *QueryContext) (map[string]interface{}, error) {
 	dimensionStr, err := request.RequireString("dimension")
 	if err != nil {
 		return nil, err
@@ -635,8 +685,8 @@ func buildCompareQuery(request mcp.CallToolRequest, metric string) (map[string]i
 		depth = dp
 	}
 	allSelected := true
-	if val, err := request.RequireString("all_selected"); err == nil && val == "false" {
-		allSelected = false
+	if val, err := request.RequireBool("all_selected"); err == nil {
+		allSelected = val
 	}
 
 	outsort := "avg_bits_per_sec"
@@ -662,7 +712,7 @@ func buildCompareQuery(request mcp.CallToolRequest, metric string) (map[string]i
 		query["all_selected"] = false
 	}
 
-	filtersObj := buildFilters(request)
+	filtersObj := buildFilters(request, ctx)
 	if filtersObj != nil {
 		query["filters_obj"] = filtersObj
 	}
@@ -846,7 +896,7 @@ func formatBitsPerSec(bps float64) string {
 
 func makeQueryURLHandler(client *kentik.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		query, err := buildQueryObject(request)
+		query, err := buildQueryObject(request, nil)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

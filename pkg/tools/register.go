@@ -23,4 +23,5 @@ func RegisterAll(s *server.MCPServer, client *kentik.Client) {
 	registerAIAdvisorTools(s, client)
 	registerDimensionTools(s)
 	registerContextTools(s)
+	registerAccountTools(s, client)
 }

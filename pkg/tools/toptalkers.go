@@ -85,7 +85,7 @@ func makeTopTalkersHandler(client *kentik.Client) server.ToolHandlerFunc {
 			limit = lm
 		}
 
-		resolvedDevices := resolveDeviceShortcuts(client, request)
+		resolvedDevices := resolveDeviceShortcuts(client, request, nil)
 
 		outsort := "avg_bits_per_sec"
 		if metricStr == "fps" {
@@ -113,7 +113,7 @@ func makeTopTalkersHandler(client *kentik.Client) server.ToolHandlerFunc {
 			query["all_selected"] = false
 		}
 
-		filtersObj := buildFilters(request)
+		filtersObj := buildFilters(request, nil)
 		if filtersObj != nil {
 			query["filters_obj"] = filtersObj
 		}

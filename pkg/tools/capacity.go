@@ -32,13 +32,16 @@ func registerCapacityPlanTools(s *server.MCPServer, client *kentik.Client) {
 		mcp.WithNumber("utilization_threshold",
 			mcp.Description("Only show interfaces above this utilization %. Default: 0 (show all)"),
 		),
+		mcp.WithNumber("interface_speed_gbps",
+			mcp.Description("Interface speed in Gbps for utilization calculation. Default: 100. Set to actual speed (e.g. 10, 400) for accurate utilization %."),
+		),
 	)
 	s.AddTool(capacityPlan, makeCapacityPlanHandler(client))
 }
 
 func makeCapacityPlanHandler(client *kentik.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		resolvedDevices := resolveDeviceShortcuts(client, request)
+		resolvedDevices := resolveDeviceShortcuts(client, request, nil)
 
 		lookback := 3600.0
 		if lb, err := request.RequireFloat("lookback_seconds"); err == nil {
@@ -47,6 +50,10 @@ func makeCapacityPlanHandler(client *kentik.Client) server.ToolHandlerFunc {
 		threshold := 0.0
 		if th, err := request.RequireFloat("utilization_threshold"); err == nil {
 			threshold = th
+		}
+		speedGbps := 100.0
+		if sp, err := request.RequireFloat("interface_speed_gbps"); err == nil && sp > 0 {
+			speedGbps = sp
 		}
 		ifDescFilter, _ := request.RequireString("interface_description_filter")
 
@@ -114,12 +121,14 @@ func makeCapacityPlanHandler(client *kentik.Client) server.ToolHandlerFunc {
 
 		// We need interface speeds — fetch from the API for each device
 		// For now, estimate based on common speeds or show raw bandwidth
+		speedBps := speedGbps * 1e9
+
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("## Interface Capacity Report (%d interfaces)\n\n", len(entries)))
-		sb.WriteString(fmt.Sprintf("| %-65s | %14s | %14s | %14s |\n",
-			"Interface", "Avg Egress", "P95 Egress", "Max Egress"))
+		sb.WriteString(fmt.Sprintf("## Interface Capacity Report (%d interfaces, speed: %.0fG)\n\n", len(entries), speedGbps))
+		sb.WriteString(fmt.Sprintf("| %-65s | %14s | %14s | %14s | %8s |\n",
+			"Interface", "Avg Egress", "P95 Egress", "Max Egress", "Avg Util"))
 		sb.WriteString("|" + strings.Repeat("-", 67) + "|" + strings.Repeat("-", 16) +
-			"|" + strings.Repeat("-", 16) + "|" + strings.Repeat("-", 16) + "|\n")
+			"|" + strings.Repeat("-", 16) + "|" + strings.Repeat("-", 16) + "|" + strings.Repeat("-", 10) + "|\n")
 
 		shown := 0
 		for _, e := range entries {
@@ -127,13 +136,10 @@ func makeCapacityPlanHandler(client *kentik.Client) server.ToolHandlerFunc {
 			p95, _ := e["p95th_bits_per_sec"].(float64)
 			max, _ := e["max_bits_per_sec"].(float64)
 
-			// Skip if below threshold (approximate — we'd need interface speed for real %)
-			if threshold > 0 {
-				// Assume 100G interfaces as default for threshold check
-				util := avg / 100e9 * 100
-				if util < threshold {
-					continue
-				}
+			util := avg / speedBps * 100
+
+			if threshold > 0 && util < threshold {
+				continue
 			}
 
 			key := fmt.Sprintf("%v", e["key"])
@@ -141,8 +147,8 @@ func makeCapacityPlanHandler(client *kentik.Client) server.ToolHandlerFunc {
 				key = key[:62] + "..."
 			}
 
-			sb.WriteString(fmt.Sprintf("| %-65s | %14s | %14s | %14s |\n",
-				key, formatBitsPerSec(avg), formatBitsPerSec(p95), formatBitsPerSec(max)))
+			sb.WriteString(fmt.Sprintf("| %-65s | %14s | %14s | %14s | %7.1f%% |\n",
+				key, formatBitsPerSec(avg), formatBitsPerSec(p95), formatBitsPerSec(max), util))
 			shown++
 		}
 
@@ -152,7 +158,7 @@ func makeCapacityPlanHandler(client *kentik.Client) server.ToolHandlerFunc {
 
 		sb.WriteString(fmt.Sprintf("\n*%d interfaces shown", shown))
 		if threshold > 0 {
-			sb.WriteString(fmt.Sprintf(" (filtered to >%.0f%% utilization, assuming 100G)", threshold))
+			sb.WriteString(fmt.Sprintf(" (filtered to >%.0f%% utilization @ %.0fG)", threshold, speedGbps))
 		}
 		sb.WriteString("*\n")
 

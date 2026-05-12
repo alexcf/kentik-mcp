@@ -41,6 +41,8 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 | `kentik_list_tags` | List flow tags |
 | `kentik_get_tag` | Get tag details |
 | `kentik_ai_advisor` | Ask Kentik's AI Advisor natural language questions about your network |
+| `kentik_list_accounts` | List configured account profiles and show the active one |
+| `kentik_switch_account` | Switch to a different Kentik account at runtime |
 
 ## Prerequisites
 
@@ -64,7 +66,7 @@ go build -o kentik-mcp .
 
 ## Configuration
 
-Set the following environment variables:
+### Option 1 — Environment variables (single account)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -77,6 +79,38 @@ export KENTIK_EMAIL=user@example.com
 export KENTIK_API_TOKEN=your_api_token_here
 export KENTIK_REGION=US
 ```
+
+### Option 2 — Profile config file (multiple accounts)
+
+Create `~/.kentik-mcp.json`:
+
+```json
+{
+  "profiles": [
+    {
+      "name": "prod-us",
+      "email": "user@company.com",
+      "api_token": "your_us_token",
+      "region": "US"
+    },
+    {
+      "name": "prod-eu",
+      "email": "user@company.com",
+      "api_token": "your_eu_token",
+      "region": "EU"
+    }
+  ]
+}
+```
+
+Select a profile at startup:
+
+```bash
+export KENTIK_PROFILE=prod-us
+./kentik-mcp
+```
+
+If `KENTIK_PROFILE` is unset, the first profile in the file is used. Once running, use `kentik_switch_account` to change accounts at runtime without restarting.
 
 ## Usage
 

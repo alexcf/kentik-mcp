@@ -42,7 +42,7 @@ func registerSNMPTools(s *server.MCPServer, client *kentik.Client) {
 
 func makeQueryInterfaceTrafficHandler(client *kentik.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		resolvedDevices := resolveDeviceShortcuts(client, request)
+		resolvedDevices := resolveDeviceShortcuts(client, request, nil)
 
 		lookback := 3600.0
 		if lb, err := request.RequireFloat("lookback_seconds"); err == nil {
