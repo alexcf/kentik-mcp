@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/awlx/kentik-mcp/pkg/kentik"
-	"github.com/awlx/kentik-mcp/pkg/tools"
+	"github.com/alexcf/kentik-mcp/pkg/kentik"
+	"github.com/alexcf/kentik-mcp/pkg/tools"
 	"github.com/mark3labs/mcp-go/server"
 )
 

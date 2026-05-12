@@ -1,4 +1,4 @@
-module github.com/awlx/kentik-mcp
+module github.com/alexcf/kentik-mcp
 
 go 1.25.0
 

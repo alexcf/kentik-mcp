@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/awlx/kentik-mcp/pkg/kentik"
+	"github.com/alexcf/kentik-mcp/pkg/kentik"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )

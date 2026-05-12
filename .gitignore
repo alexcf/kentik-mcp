@@ -11,3 +11,4 @@ kentik-mcp
 # OS
 .DS_Store
 Thumbs.db
+.gh/
