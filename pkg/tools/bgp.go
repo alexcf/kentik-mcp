@@ -53,7 +53,8 @@ func registerBGPTools(s *server.MCPServer, client *kentik.Client) {
 			"name":   name,
 			"status": "BGP_MONITOR_STATUS_ACTIVE",
 			"settings": map[string]interface{}{
-				"targets": targets,
+				"targets":         targets,
+				"health_settings": map[string]interface{}{},
 			},
 		}
 		if v, err := req.RequireString("description"); err == nil && v != "" { monitor["description"] = v }
