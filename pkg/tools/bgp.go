@@ -43,7 +43,11 @@ func registerBGPTools(s *server.MCPServer, client *kentik.Client) {
 		if err != nil { return mcp.NewToolResultError(err.Error()), nil }
 		var targets []map[string]interface{}
 		for _, p := range splitAndTrim(prefixStr) {
-			targets = append(targets, map[string]interface{}{"prefix": p})
+			afi := "AFI_IP4"
+			if len(p) > 0 && strings.Contains(p, ":") {
+				afi = "AFI_IP6"
+			}
+			targets = append(targets, map[string]interface{}{"prefix": p, "afi": afi})
 		}
 		monitor := map[string]interface{}{
 			"name":   name,
