@@ -12,8 +12,13 @@ import (
 func registerWriteAlertingTools(s *server.MCPServer, client *kentik.Client) {
 	s.AddTool(mcp.NewTool("kentik_list_alert_policies",
 		mcp.WithDescription("List all alert policies configured in Kentik."),
+		mcp.WithString("policy_type", mcp.Description("Filter by type: 'flow', 'nms', 'synthetic'. Leave empty for all.")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		data, err := client.V5("GET", "/alerts", nil)
+		body := map[string]interface{}{}
+		if v, err := req.RequireString("policy_type"); err == nil && v != "" {
+			body["policyType"] = v
+		}
+		data, err := client.V6("POST", "/v202505/policies/list", body)
 		if err != nil { return mcp.NewToolResultError(fmt.Sprintf("List alert policies failed: %v", err)), nil }
 		return mcp.NewToolResultText(formatJSON(data)), nil
 	})
@@ -21,62 +26,42 @@ func registerWriteAlertingTools(s *server.MCPServer, client *kentik.Client) {
 	s.AddTool(mcp.NewTool("kentik_get_alert_policy",
 		mcp.WithDescription("Get a specific alert policy by ID."),
 		mcp.WithString("policy_id", mcp.Required(), mcp.Description("Policy ID.")),
+		mcp.WithString("policy_type", mcp.Required(), mcp.Description("Policy type: 'flow', 'nms', or 'synthetic'.")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, err := req.RequireString("policy_id")
 		if err != nil { return mcp.NewToolResultError(err.Error()), nil }
-		data, err := client.V5("GET", fmt.Sprintf("/alert/%s", id), nil)
+		ptype, err := req.RequireString("policy_type")
+		if err != nil { return mcp.NewToolResultError(err.Error()), nil }
+		data, err := client.V6("GET", fmt.Sprintf("/v202505/policies/%s/%s", ptype, id), nil)
 		if err != nil { return mcp.NewToolResultError(fmt.Sprintf("Get alert policy failed: %v", err)), nil }
 		return mcp.NewToolResultText(formatJSON(data)), nil
 	})
 
-	s.AddTool(mcp.NewTool("kentik_create_alert_policy",
-		mcp.WithDescription("Create a new alert policy in Kentik."),
-		mcp.WithString("policy_name", mcp.Required(), mcp.Description("Policy name.")),
-		mcp.WithString("policy_description", mcp.Description("Policy description.")),
-		mcp.WithString("severity", mcp.Description("Alert severity: 'critical', 'major', 'minor', 'warning'.")),
-		mcp.WithBoolean("is_active", mcp.Description("Whether policy is active. Default: true.")),
-	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		name, err := req.RequireString("policy_name")
-		if err != nil { return mcp.NewToolResultError(err.Error()), nil }
-		policy := map[string]interface{}{"policy_name": name, "status": "A"}
-		if v, err := req.RequireString("policy_description"); err == nil && v != "" { policy["policy_description"] = v }
-		if v, err := req.RequireString("severity"); err == nil && v != "" { policy["activate_when"] = v }
-		if v, err := req.RequireBool("is_active"); err == nil && !v { policy["status"] = "I" }
-		data, err := client.V5("POST", "/alert", map[string]interface{}{"policy": policy})
-		if err != nil { return mcp.NewToolResultError(fmt.Sprintf("Create alert policy failed: %v", err)), nil }
-		return mcp.NewToolResultText(formatJSON(data)), nil
-	})
-
-	s.AddTool(mcp.NewTool("kentik_update_alert_policy",
-		mcp.WithDescription("Update an existing alert policy."),
-		mcp.WithString("policy_id", mcp.Required(), mcp.Description("Policy ID to update.")),
-		mcp.WithString("policy_name", mcp.Description("New policy name.")),
-		mcp.WithString("policy_description", mcp.Description("New description.")),
-		mcp.WithString("severity", mcp.Description("New severity.")),
-		mcp.WithBoolean("is_active", mcp.Description("Set active/inactive.")),
+	s.AddTool(mcp.NewTool("kentik_disable_alert_policy",
+		mcp.WithDescription("Disable an alert policy (stop it from generating alerts)."),
+		mcp.WithString("policy_id", mcp.Required(), mcp.Description("Policy ID.")),
+		mcp.WithString("policy_type", mcp.Required(), mcp.Description("Policy type: 'flow', 'nms', or 'synthetic'.")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, err := req.RequireString("policy_id")
 		if err != nil { return mcp.NewToolResultError(err.Error()), nil }
-		policy := map[string]interface{}{}
-		if v, err := req.RequireString("policy_name"); err == nil && v != "" { policy["policy_name"] = v }
-		if v, err := req.RequireString("policy_description"); err == nil && v != "" { policy["policy_description"] = v }
-		if v, err := req.RequireString("severity"); err == nil && v != "" { policy["activate_when"] = v }
-		if v, err := req.RequireBool("is_active"); err == nil { if v { policy["status"] = "A" } else { policy["status"] = "I" } }
-		if len(policy) == 0 { return mcp.NewToolResultError("No fields to update."), nil }
-		data, err := client.V5("PUT", fmt.Sprintf("/alert/%s", id), map[string]interface{}{"policy": policy})
-		if err != nil { return mcp.NewToolResultError(fmt.Sprintf("Update alert policy failed: %v", err)), nil }
+		ptype, err := req.RequireString("policy_type")
+		if err != nil { return mcp.NewToolResultError(err.Error()), nil }
+		data, err := client.V6("POST", fmt.Sprintf("/v202505/policies/%s/%s/disable", ptype, id), map[string]interface{}{})
+		if err != nil { return mcp.NewToolResultError(fmt.Sprintf("Disable alert policy failed: %v", err)), nil }
 		return mcp.NewToolResultText(formatJSON(data)), nil
 	})
 
-	s.AddTool(mcp.NewTool("kentik_delete_alert_policy",
-		mcp.WithDescription("Delete an alert policy by ID."),
-		mcp.WithString("policy_id", mcp.Required(), mcp.Description("Policy ID to delete.")),
+	s.AddTool(mcp.NewTool("kentik_enable_alert_policy",
+		mcp.WithDescription("Enable a previously disabled alert policy."),
+		mcp.WithString("policy_id", mcp.Required(), mcp.Description("Policy ID.")),
+		mcp.WithString("policy_type", mcp.Required(), mcp.Description("Policy type: 'flow', 'nms', or 'synthetic'.")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, err := req.RequireString("policy_id")
 		if err != nil { return mcp.NewToolResultError(err.Error()), nil }
-		data, err := client.V5("DELETE", fmt.Sprintf("/alert/%s", id), nil)
-		if err != nil { return mcp.NewToolResultError(fmt.Sprintf("Delete alert policy failed: %v", err)), nil }
-		if len(data) == 0 { return mcp.NewToolResultText(fmt.Sprintf("Alert policy %s deleted.", id)), nil }
+		ptype, err := req.RequireString("policy_type")
+		if err != nil { return mcp.NewToolResultError(err.Error()), nil }
+		data, err := client.V6("POST", fmt.Sprintf("/v202505/policies/%s/%s/enable", ptype, id), map[string]interface{}{})
+		if err != nil { return mcp.NewToolResultError(fmt.Sprintf("Enable alert policy failed: %v", err)), nil }
 		return mcp.NewToolResultText(formatJSON(data)), nil
 	})
 
