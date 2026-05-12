@@ -34,6 +34,8 @@ func registerBGPTools(s *server.MCPServer, client *kentik.Client) {
 		mcp.WithDescription("Create a new BGP monitor for prefix visibility and route change detection."),
 		mcp.WithString("monitor_name", mcp.Required(), mcp.Description("Monitor name.")),
 		mcp.WithString("prefixes", mcp.Required(), mcp.Description("Comma-separated CIDR prefixes to monitor e.g. '1.2.3.0/24,5.6.0.0/16'.")),
+		mcp.WithString("origin_asns", mcp.Required(), mcp.Description("Comma-separated ASNs that are valid originators of the prefixes e.g. '64496,64497'.")),
+		mcp.WithString("upstream_asns", mcp.Required(), mcp.Description("Comma-separated ASNs expected to propagate the prefixes e.g. '174,3356'.")),
 		mcp.WithString("description", mcp.Description("Optional description.")),
 		mcp.WithString("notify_channel_ids", mcp.Description("Comma-separated notification channel IDs.")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -41,20 +43,36 @@ func registerBGPTools(s *server.MCPServer, client *kentik.Client) {
 		if err != nil { return mcp.NewToolResultError(err.Error()), nil }
 		prefixStr, err := req.RequireString("prefixes")
 		if err != nil { return mcp.NewToolResultError(err.Error()), nil }
+		originStr, err := req.RequireString("origin_asns")
+		if err != nil { return mcp.NewToolResultError(err.Error()), nil }
+		upstreamStr, err := req.RequireString("upstream_asns")
+		if err != nil { return mcp.NewToolResultError(err.Error()), nil }
+
 		var targets []map[string]interface{}
 		for _, p := range splitAndTrim(prefixStr) {
 			afi := "AFI_IP4"
-			if len(p) > 0 && strings.Contains(p, ":") {
-				afi = "AFI_IP6"
-			}
+			if strings.Contains(p, ":") { afi = "AFI_IP6" }
 			targets = append(targets, map[string]interface{}{"prefix": p, "afi": afi, "safi": "SAFI_UNICAST"})
 		}
+		var originASNs []int
+		for _, a := range splitAndTrim(originStr) {
+			var n int
+			if _, err := fmt.Sscanf(a, "%d", &n); err == nil { originASNs = append(originASNs, n) }
+		}
+		var upstreamASNs []int
+		for _, a := range splitAndTrim(upstreamStr) {
+			var n int
+			if _, err := fmt.Sscanf(a, "%d", &n); err == nil { upstreamASNs = append(upstreamASNs, n) }
+		}
+
 		monitor := map[string]interface{}{
 			"name":   name,
 			"status": "BGP_MONITOR_STATUS_ACTIVE",
 			"settings": map[string]interface{}{
-				"targets":         targets,
-				"health_settings": map[string]interface{}{},
+				"targets":           targets,
+				"allowed_asns":      originASNs,
+				"allowed_upstreams": upstreamASNs,
+				"health_settings":   map[string]interface{}{},
 			},
 		}
 		if v, err := req.RequireString("description"); err == nil && v != "" { monitor["description"] = v }
