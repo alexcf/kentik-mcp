@@ -36,4 +36,5 @@ func RegisterAll(s *server.MCPServer, client *kentik.Client) {
 	RegisterBatch5(s, client)
 	RegisterBatch6(s, client)
 	RegisterBatch79(s, client)
+	RegisterV5Gaps(s, client)
 }

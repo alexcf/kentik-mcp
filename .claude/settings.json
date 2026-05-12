@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Write(/Users/acruz/dev/kentik-mcp/**)",
+      "Edit(/Users/acruz/dev/kentik-mcp/**)",
+      "Bash(go build *)",
+      "Bash(go get *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(cat > *)",
+      "Bash(python3 *)"
+    ]
+  }
+}
