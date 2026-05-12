@@ -47,7 +47,7 @@ func registerBGPTools(s *server.MCPServer, client *kentik.Client) {
 			if len(p) > 0 && strings.Contains(p, ":") {
 				afi = "AFI_IP6"
 			}
-			targets = append(targets, map[string]interface{}{"prefix": p, "afi": afi})
+			targets = append(targets, map[string]interface{}{"prefix": p, "afi": afi, "safi": "SAFI_UNICAST"})
 		}
 		monitor := map[string]interface{}{
 			"name":   name,
